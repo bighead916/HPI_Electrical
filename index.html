@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>線材資料管理系統</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f1f5f9; font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif; }
+    ::-webkit-scrollbar { height: 6px; width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    /* ─── Terminal catalog ───────────────────────────────────────────────── */
+    const TERMINAL_DATA = {
+      "歐式端子": [
+        { model: "CE002508",  color: "天藍色",       awg: "23AWG 以上",  mm2: "≤0.25mm²" },
+        { model: "CE005010",  color: "橘色",         awg: "22~20AWG",    mm2: "0.3~0.5mm²" },
+        { model: "CE007510",  color: "淺藍色",       awg: "20~19AWG",    mm2: "0.5~0.75mm²" },
+        { model: "CE010010",  color: "黃色",         awg: "18~17AWG",    mm2: "0.8~1mm²" },
+        { model: "CE015010",  color: "紅色",         awg: "16AWG",       mm2: "1.25~1.5mm²" },
+        { model: "CE015012",  color: "紅色",         awg: "16AWG",       mm2: "1.25~1.5mm²" },
+        { model: "CE025010",  color: "深藍色",       awg: "14AWG",       mm2: "2.0~2.5mm²" },
+        { model: "CE040010",  color: "灰色",         awg: "12~11AWG",    mm2: "3.0~4.0mm²" },
+        { model: "CE060010",  color: "黑色",         awg: "10AWG",       mm2: "5.0~6.0mm²" },
+        { model: "CE100012",  color: "白色",         awg: "8AWG",        mm2: "8.0~10mm²" },
+        { model: "CE160012",  color: "綠色",         awg: "6AWG",        mm2: "14~16mm²" },
+        { model: "CT225010",  color: "雙線式深藍色", awg: "14AWG",       mm2: "2.0~2.5mm²" },
+        { model: "CT260014",  color: "雙線式黑色",   awg: "10AWG",       mm2: "5.5~6.0mm²" },
+        { model: "CT210014",  color: "雙線式白色",   awg: "7AWG",        mm2: "10mm²" },
+      ],
+      "母壓排": [], // 規格由線芯數量動態決定
+      "R型端子": [
+        { model: "R1.25-3S", awg: "22~16AWG", mm2: "0.3~1.25mm²" },
+        { model: "R1.25-4",  awg: "22~16AWG", mm2: "0.3~1.25mm²" },
+        { model: "R1.25-4M", awg: "22~16AWG", mm2: "0.3~1.25mm²" },
+        { model: "R1.25-5",  awg: "22~16AWG", mm2: "0.3~1.25mm²" },
+        { model: "R2-4M",    awg: "15~14AWG", mm2: "1.5~2.0mm²" },
+        { model: "R2-5",     awg: "15~14AWG", mm2: "1.5~2.0mm²" },
+        { model: "R2-8",     awg: "15~14AWG", mm2: "1.5~2.0mm²" },
+        { model: "R3.5-4",   awg: "13~12AWG", mm2: "2.5~3.5mm²" },
+        { model: "R3.5-5",   awg: "13~12AWG", mm2: "2.5~3.5mm²" },
+        { model: "R3.5-6",   awg: "13~12AWG", mm2: "2.5~3.5mm²" },
+        { model: "R5.5-4",   awg: "11~10AWG", mm2: "4.0~6.0mm²" },
+        { model: "R5.5-5",   awg: "11~10AWG", mm2: "4.0~6.0mm²" },
+        { model: "R5.5-6",   awg: "11~10AWG", mm2: "4.0~6.0mm²" },
+        { model: "R8-4",     awg: "9~8AWG",   mm2: "6.3~8.3mm²" },
+        { model: "R8-5",     awg: "9~8AWG",   mm2: "6.3~8.3mm²" },
+        { model: "R8-5S",    awg: "9~8AWG",   mm2: "6.3~8.3mm²" },
+        { model: "R8-6",     awg: "9~8AWG",   mm2: "6.3~8.3mm²" },
+        { model: "R8-8",     awg: "9~8AWG",   mm2: "6.3~8.3mm²" },
+        { model: "R14-6",    awg: "6AWG",      mm2: "13~14mm²" },
+        { model: "R14-8",    awg: "6AWG",      mm2: "13~14mm²" },
+        { model: "R14-10",   awg: "6AWG",      mm2: "13~14mm²" },
+      ],
+      "Y型端子": [
+        { model: "Y1.25-3S",         awg: "22~16AWG", mm2: "0.3~1.25mm²" },
+        { model: "Y1.25-4",          awg: "22~16AWG", mm2: "0.5~1.25mm²" },
+        { model: "Y2-3S",            awg: "15~14AWG", mm2: "1.5~2.0mm²" },
+        { model: "Y2-4",             awg: "15~14AWG", mm2: "1.5~2.0mm²" },
+        { model: "Y3.5-5",           awg: "13~12AWG", mm2: "2.6~3.5mm²" },
+        { model: "Y5.5-4",           awg: "11~10AWG", mm2: "4.1~6.0mm²" },
+        { model: "YF1.25-3S (絕緣)", awg: "22~16AWG", mm2: "0.3~1.25mm²" },
+        { model: "YF2-3S (絕緣)",    awg: "15~14AWG", mm2: "1.5~2.5mm²" },
+      ],
+      "全絕緣母端子": [
+        { model: "PV1.25-3A", awg: "22~16AWG", mm2: "0.3~1.25mm²" },
+        { model: "PV1.25-7A", awg: "22~16AWG", mm2: "0.3~1.25mm²" },
+        { model: "PV2-3A",    awg: "15~14AWG", mm2: "1.5~2.0mm²" },
+        { model: "PV2-7A",    awg: "15~14AWG", mm2: "1.5~2.0mm²" },
+      ],
+      "AMP金屬PIN針": [
+        { model: "T66A6T (AMP-1.0 圓公針)", awg: "24~17AWG", mm2: "0.2~1.0mm²" },
+        { model: "T66A5T (AMP-1.0 圓母針)", awg: "24~17AWG", mm2: "0.2~1.0mm²" },
+        { model: "10110SB-2 (1.0 方公針)",  awg: "24~17AWG", mm2: "0.2~1.0mm²" },
+        { model: "11110SB-2 (1.0 方母針)",  awg: "24~17AWG", mm2: "0.2~1.0mm²" },
+        { model: "T6504T (JST2.54 公針)",   awg: "27~20AWG", mm2: "0.1~0.5mm²" },
+        { model: "T6503T (JST2.54 母針)",   awg: "27~20AWG", mm2: "0.1~0.5mm²" },
+        { model: "24183SB-2 (3.96 母針)",   awg: "22~19AWG", mm2: "0.3~0.75mm²" },
+      ],
+    };
+
+    const CONNECTOR_TYPES = Object.keys(TERMINAL_DATA);
+    const WIRE_COLORS = ["棕","黑","紅","橙","黃","綠","藍","紫","白","灰","黃綠"];
+    const COLOR_DOTS = {
+      "棕":"#92400e","黑":"#1e293b","紅":"#ef4444","橙":"#f97316",
+      "黃":"#eab308","綠":"#22c55e","藍":"#3b82f6","紫":"#a855f7",
+      "白":"#e2e8f0","灰":"#94a3b8","黃綠":"#84cc16",
+    };
+
+    const emptyCore = () => ({
+      color: "", code: "",
+      leftEndType: "", leftEndModel: "",
+      rightEndType: "", rightEndModel: "",
+      remark: "",
+    });
+
+    const emptyForm = (machineName = "") => ({
+      machineName,
+      wireName: "", wireLength: "",
+      wireGauge: "", wireGaugeUnit: "AWG",
+      wireRemark: "",
+      coreCount: "1",
+      cores: [emptyCore()],
+    });
+
+    /* ─── Styles ─────────────────────────────────────────────────────────── */
+    const selStyle = {
+      border: "1px solid #cbd5e1", borderRadius: 4, padding: "3px 6px",
+      fontSize: 11, background: "#fff", width: "100%", cursor: "pointer",
+    };
+    const inputStyle = {
+      border: "1px solid #cbd5e1", borderRadius: 4, padding: "4px 8px",
+      fontSize: 12, width: "100%", boxSizing: "border-box",
+    };
+    const labelStyle = { fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 3, display: "block" };
+    const btnPrimary = {
+      background: "#1e40af", color: "#fff", border: "none", borderRadius: 6,
+      padding: "8px 20px", fontWeight: 700, fontSize: 13, cursor: "pointer", letterSpacing: "0.5px",
+    };
+    const btnDanger = {
+      background: "transparent", color: "#ef4444", border: "1px solid #fca5a5",
+      borderRadius: 4, padding: "2px 8px", fontSize: 11, cursor: "pointer",
+    };
+    const btnSuccess = {
+      background: "#15803d", color: "#fff", border: "none", borderRadius: 6,
+      padding: "8px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer",
+    };
+    const thStyle = {
+      background: "#1e3a5f", color: "#e2e8f0", padding: "7px 8px",
+      fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", textAlign: "center",
+      borderRight: "1px solid #2d5282",
+    };
+    const tdStyle = (odd) => ({
+      padding: "5px 7px", fontSize: 11, borderRight: "1px solid #e2e8f0",
+      background: odd ? "#f8fafc" : "#fff", verticalAlign: "middle", textAlign: "center",
+    });
+    const sectionHead = {
+      background: "#0f172a", color: "#94a3b8", padding: "4px 10px",
+      fontSize: 10, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase",
+    };
+
+    /* ─── Helpers ────────────────────────────────────────────────────────── */
+    function getFilteredModels(typeVal) {
+      return TERMINAL_DATA[typeVal] || [];
+    }
+
+    /* ─── EndSelect component ────────────────────────────────────────────── */
+    function EndSelect({ typeVal, modelVal, onTypeChange, onModelChange, coreCount }) {
+      const filteredModels = getFilteredModels(typeVal);
+      const n = parseInt(coreCount) || 0;
+      // 母壓排永遠鎖定為「線芯數量P」，不提供下拉
+      const pressLocked = typeVal === "母壓排";
+      const lockedLabel = pressLocked ? `${n}P` : "";
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <select value={typeVal} onChange={e => onTypeChange(e.target.value)} style={selStyle}>
+            <option value="">── 類型 ──</option>
+            {CONNECTOR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+
+          {typeVal && (
+            pressLocked ? (
+              <div style={{
+                background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: 4,
+                padding: "3px 8px", fontSize: 11, color: "#92400e", fontWeight: 700,
+                display: "flex", alignItems: "center", gap: 4,
+              }}>
+                🔒 {lockedLabel}
+                <span style={{ color: "#b45309", marginLeft: 4 }}>↓ 套用全部</span>
+              </div>
+            ) : (
+              <select value={modelVal} onChange={e => onModelChange(e.target.value)}
+                style={{ ...selStyle, color: modelVal ? "#0f172a" : "#94a3b8" }}>
+                <option value="">── 規格 ──</option>
+                {filteredModels.map(t => {
+                  const label = (typeVal === "歐式端子" && t.color)
+                    ? `${t.color}（${t.model}）（${t.awg} / ${t.mm2}）`
+                    : `${t.model}${t.awg !== "-" ? `  (${t.awg})` : ""}`;
+                  return <option key={t.model} value={t.model}>{label}</option>;
+                })}
+              </select>
+            )
+          )}
+        </div>
+      );
+    }
+
+    /* ─── Main App ───────────────────────────────────────────────────────── */
+    function WireManager() {
+      const [wireList, setWireList] = useState([]);
+      const [form, setForm] = useState(emptyForm());
+      const [activeTab, setActiveTab] = useState("form");
+      const [editId, setEditId] = useState(null);
+      const [flash, setFlash] = useState("");
+
+      const showFlash = (msg) => { setFlash(msg); setTimeout(() => setFlash(""), 2500); };
+
+      const setCoreCount = (val) => {
+        const n = Math.max(1, Math.min(50, parseInt(val) || 1));
+        const newCores = Array.from({ length: n }, (_, i) => form.cores[i] || emptyCore());
+        setForm({ ...form, coreCount: String(n), cores: newCores });
+      };
+
+      const updateCore = (i, field, value) => {
+        const n = parseInt(form.coreCount) || 1;
+        let cores = form.cores.map((c, idx) => idx === i ? { ...c, [field]: value } : c);
+
+        if (field === "leftEndType")  cores[i] = { ...cores[i], leftEndModel: "" };
+        if (field === "rightEndType") cores[i] = { ...cores[i], rightEndModel: "" };
+
+        const autoFillModel = (modelField, newType) => {
+          if (newType === "母壓排") {
+            const lockedP = `${n}P`;
+            cores[i] = { ...cores[i], [modelField]: lockedP };
+            return lockedP;
+          }
+          return null;
+        };
+
+        if (field === "leftEndType") {
+          const locked = autoFillModel("leftEndModel", value);
+          if (value === "母壓排") {
+            const model = locked || cores[i].leftEndModel;
+            cores = cores.map(c => ({ ...c, leftEndType: "母壓排", leftEndModel: model }));
+          }
+        }
+        if (field === "leftEndModel") {
+          if (cores[i].leftEndType === "母壓排")
+            cores = cores.map(c => ({ ...c, leftEndModel: value }));
+        }
+        if (field === "rightEndType") {
+          const locked = autoFillModel("rightEndModel", value);
+          if (value === "母壓排") {
+            const model = locked || cores[i].rightEndModel;
+            cores = cores.map(c => ({ ...c, rightEndType: "母壓排", rightEndModel: model }));
+          }
+        }
+        if (field === "rightEndModel") {
+          if (cores[i].rightEndType === "母壓排")
+            cores = cores.map(c => ({ ...c, rightEndModel: value }));
+        }
+
+        setForm({ ...form, cores });
+      };
+
+      const handleSave = () => {
+        if (!form.wireName.trim()) { showFlash("❌ 請輸入線名"); return; }
+        if (editId !== null) {
+          setWireList(wireList.map(w => w.id === editId ? { ...form, id: editId } : w));
+          setEditId(null);
+          showFlash("✅ 已更新線材");
+        } else {
+          setWireList([...wireList, { ...form, id: Date.now() }]);
+          showFlash("✅ 已新增線材");
+        }
+        setForm(emptyForm(form.machineName));
+        setActiveTab("list");
+      };
+
+      const handleEdit = (wire) => {
+        setForm({ ...wire });
+        setEditId(wire.id);
+        setActiveTab("form");
+      };
+
+      const handleDelete = (id) => {
+        if (window.confirm("確定刪除此線材？"))
+          setWireList(wireList.filter(w => w.id !== id));
+      };
+
+      const handleExport = async () => {
+        const wb = new ExcelJS.Workbook();
+        wb.creator = "線材管理系統";
+
+        // ── palette ──────────────────────────────────────────
+        const C = {
+          hdrBg:   "1E3A5F", hdrFg:   "E2E8F0",
+          titleBg: "0F172A", titleFg:  "94A3B8",
+          odd:     "F8FAFC", even:     "FFFFFF",
+          wireIdx: "1E40AF", coreIdx:  "64748B",
+          leftBg:  "DBEAFE", leftFg:   "1E40AF",
+          rightBg: "DCFCE7", rightFg:  "166534",
+          sepBg:   "E2E8F0",
+          wireFg:  "1E40AF",
+          border:  "CBD5E1",
+        };
+
+        // 線色 → Excel 背景色對照表（bg hex, 前景用黑或白）
+        const WIRE_COLOR_MAP = {
+          "棕":  { bg: "92400E", fg: "FFFFFF" },
+          "黑":  { bg: "1E293B", fg: "FFFFFF" },
+          "紅":  { bg: "EF4444", fg: "FFFFFF" },
+          "橙":  { bg: "F97316", fg: "FFFFFF" },
+          "黃":  { bg: "EAB308", fg: "1E293B" },
+          "綠":  { bg: "22C55E", fg: "FFFFFF" },
+          "藍":  { bg: "3B82F6", fg: "FFFFFF" },
+          "紫":  { bg: "A855F7", fg: "FFFFFF" },
+          "白":  { bg: "F8FAFC", fg: "1E293B" },
+          "灰":  { bg: "94A3B8", fg: "FFFFFF" },
+          "黃綠":{ bg: "84CC16", fg: "1E293B" },
+        };
+
+        const borderAll = (color) => ({
+          top:    { style: "thin", color: { argb: "FF" + color } },
+          bottom: { style: "thin", color: { argb: "FF" + color } },
+          left:   { style: "thin", color: { argb: "FF" + color } },
+          right:  { style: "thin", color: { argb: "FF" + color } },
+        });
+        const fill = (hex) => ({ type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex } });
+        const font = (hex, bold=false, sz=10) => ({ name: "Microsoft JhengHei", size: sz, bold, color: { argb: "FF" + hex } });
+        const align = (h="center", v="middle", wrap=false) => ({ horizontal: h, vertical: v, wrapText: wrap });
+
+        // helper: style a row of cells
+        const styleRow = (row, fills, fonts, aligns) => {
+          row.eachCell({ includeEmpty: true }, (cell, col) => {
+            const i = col - 1;
+            if (fills[i])  cell.fill   = fill(fills[i]);
+            if (fonts[i])  cell.font   = fonts[i];
+            if (aligns[i]) cell.alignment = aligns[i];
+            cell.border = borderAll(C.border);
+          });
+        };
+
+        // ── Group by machine ──────────────────────────────────
+        const grouped = wireList.reduce((acc, w) => {
+          const k = w.machineName || "(未命名機器)";
+          (acc[k] = acc[k] || []).push(w);
+          return acc;
+        }, {});
+
+        const COLS = 13; // A..M
+
+        Object.entries(grouped).forEach(([machine, wires]) => {
+          const ws = wb.addWorksheet(machine.substring(0, 31));
+
+          // column widths
+          ws.columns = [
+            { width: 14 }, // 線名
+            { width: 10 }, // 線長
+            { width: 10 }, // 線徑
+            { width: 6  }, // 芯序
+            { width: 8  }, // 線色
+            { width: 14 }, // 線碼
+            { width: 12 }, // 左端類型
+            { width: 22 }, // 左端規格
+            { width: 12 }, // 右端類型
+            { width: 22 }, // 右端規格
+            { width: 20 }, // 芯序備註
+            { width: 22 }, // 線組備註
+            { width: 4  }, // (padding)
+          ];
+
+          // ── Machine title row ─────────────────────────────
+          const titleRow = ws.addRow([`Handler Model：${machine}`]);
+          ws.mergeCells(titleRow.number, 1, titleRow.number, COLS);
+          titleRow.height = 22;
+          titleRow.getCell(1).fill = fill(C.titleBg);
+          titleRow.getCell(1).font = font(C.titleFg, true, 12);
+          titleRow.getCell(1).alignment = align("left");
+          titleRow.getCell(1).border = borderAll(C.titleBg);
+
+          // ── Header row ────────────────────────────────────
+          const hdrRow = ws.addRow(["線名","線長(mm)","線徑","芯序","線色","線碼","左端類型","左端規格","右端類型","右端規格","芯序備註","線組備註",""]);
+          hdrRow.height = 18;
+          hdrRow.eachCell({ includeEmpty: true }, cell => {
+            cell.fill      = fill(C.hdrBg);
+            cell.font      = font(C.hdrFg, true, 10);
+            cell.alignment = align("center");
+            cell.border    = borderAll(C.hdrBg);
+          });
+
+          // ── Wire rows ─────────────────────────────────────
+          wires.forEach((wire, wi) => {
+            const rowBg   = wi % 2 === 0 ? C.even : C.odd;
+            const startR  = ws.lastRow.number + 1;
+
+            wire.cores.forEach((core, ci) => {
+              const isFirst = ci === 0;
+              const row = ws.addRow([
+                isFirst ? wire.wireName   : "",
+                isFirst ? (wire.wireLength ? wire.wireLength + " mm" : "-") : "",
+                isFirst ? (wire.wireGauge  ? wire.wireGauge + " " + wire.wireGaugeUnit : "-") : "",
+                ci + 1,
+                core.color   || "-",
+                core.code    || "-",
+                core.leftEndType  || "-",
+                core.leftEndModel || "-",
+                core.rightEndType  || "-",
+                core.rightEndModel || "-",
+                core.remark        || "",
+                isFirst ? (wire.wireRemark || "") : "",
+                "",
+              ]);
+              row.height = 16;
+
+              row.eachCell({ includeEmpty: true }, (cell, col) => {
+                cell.fill      = fill(rowBg);
+                cell.font      = font("334155", false, 10);
+                cell.alignment = align("center", "middle");
+                cell.border    = borderAll(C.border);
+              });
+
+              // wire name / length / gauge → bold blue (first core only, will merge below)
+              if (isFirst) {
+                row.getCell(1).font = font(C.wireFg, true, 10);
+              }
+              // core index
+              row.getCell(4).font = font(C.coreIdx, true, 10);
+
+              // 線色欄位 → 套用對應背景色
+              const colorEntry = WIRE_COLOR_MAP[core.color];
+              if (colorEntry) {
+                const colorCell = row.getCell(5);
+                colorCell.fill = fill(colorEntry.bg);
+                colorCell.font = font(colorEntry.fg, true, 10);
+              }
+
+              // left type badge
+              if (core.leftEndType) {
+                row.getCell(7).fill = fill(C.leftBg);
+                row.getCell(7).font = font(C.leftFg, true, 9);
+              }
+              // right type badge
+              if (core.rightEndType) {
+                row.getCell(9).fill = fill(C.rightBg);
+                row.getCell(9).font = font(C.rightFg, true, 9);
+              }
+              // core remark col 11 - left-align
+              row.getCell(11).font = font("475569", false, 9);
+              row.getCell(11).alignment = align("left", "middle", true);
+            });
+
+            const endR = ws.lastRow.number;
+
+            // merge wire info cells if multi-core
+            if (wire.cores.length > 1) {
+              [1, 2, 3, 12].forEach(col => {
+                ws.mergeCells(startR, col, endR, col);
+                const cell = ws.getCell(startR, col);
+                cell.alignment = align("center", "middle", col === 12);
+              });
+            }
+            // style wireRemark cell (col 12)
+            const wRemarkCell = ws.getCell(startR, 12);
+            wRemarkCell.font = font("475569", false, 9);
+            wRemarkCell.alignment = align("left", "middle", true);
+
+            // separator row between wires
+            if (wi < wires.length - 1) {
+              const sep = ws.addRow(Array(COLS).fill(""));
+              sep.height = 4;
+              sep.eachCell({ includeEmpty: true }, cell => {
+                cell.fill   = fill(C.sepBg);
+                cell.border = borderAll(C.sepBg);
+              });
+            }
+          });
+
+          // blank row at end of sheet
+          ws.addRow([]);
+        });
+
+        // ── Download ──────────────────────────────────────────
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `線材總表_${new Date().toISOString().slice(0,10)}.xlsx`;
+        a.click();
+        showFlash("📥 匯出 Excel 成功！");
+      };
+
+      const grouped = wireList.reduce((acc, w) => {
+        const k = w.machineName || "(未命名機器)";
+        (acc[k] = acc[k] || []).push(w);
+        return acc;
+      }, {});
+
+      return (
+        <div style={{ fontFamily: "'Microsoft JhengHei','Noto Sans TC',sans-serif", background: "#f1f5f9", minHeight: "100vh" }}>
+
+          {/* ── Header ── */}
+          <div style={{ background: "#0f172a", color: "#fff", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <img
+                src="https://www.honprec.com/images/logo.png"
+                alt="HPI Logo"
+                style={{ height: 40, objectFit: "contain", filter: "brightness(0) invert(1)" }}
+                onError={e => { e.target.style.display = "none"; }}
+              />
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1, lineHeight: 1.3 }}>HPI 電控線材資料管理系統</div>
+                <div style={{ fontSize: 10, color: "#64748b", marginTop: 1, letterSpacing: "0.5px" }}>Wire / Cable Management System</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {flash && (
+                <div style={{ background: "#1e3a5f", color: "#93c5fd", padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
+                  {flash}
+                </div>
+              )}
+              {wireList.length > 0 && (
+                <button onClick={handleExport} style={{ ...btnSuccess, fontSize: 12 }}>
+                  📥 匯出 Excel ({wireList.length} 筆)
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ── Tabs ── */}
+          <div style={{ background: "#1e293b", display: "flex", gap: 2, padding: "0 16px" }}>
+            {[["form", "✏️ 新增 / 編輯"], ["list", `📋 線材總表 (${wireList.length})`]].map(([tab, label]) => (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: "10px 18px", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                  background: activeTab === tab ? "#fff" : "transparent",
+                  color: activeTab === tab ? "#1e40af" : "#94a3b8",
+                  borderRadius: "6px 6px 0 0", marginBottom: -1,
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── FORM TAB ── */}
+          {activeTab === "form" && (
+            <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
+              <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 6px rgba(0,0,0,.08)", overflow: "hidden" }}>
+                <div style={sectionHead}>線材組態 · Wire Configuration</div>
+                <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 14 }}>
+                  <div>
+                    <label style={labelStyle}>Handler Model</label>
+                    <input style={inputStyle} placeholder="e.g. HT-1028C"
+                      value={form.machineName} onChange={e => setForm({ ...form, machineName: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>線名 <span style={{ color: "#ef4444" }}>*</span></label>
+                    <input style={inputStyle} placeholder="e.g. PWR-001"
+                      value={form.wireName} onChange={e => setForm({ ...form, wireName: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>線長 (mm)</label>
+                    <input style={inputStyle} type="number" placeholder="e.g. 300"
+                      value={form.wireLength} onChange={e => setForm({ ...form, wireLength: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>線徑</label>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <input style={{ ...inputStyle, flex: 1 }} placeholder="數值"
+                        value={form.wireGauge} onChange={e => setForm({ ...form, wireGauge: e.target.value })} />
+                      <select style={{ ...selStyle, width: 72, flexShrink: 0 }}
+                        value={form.wireGaugeUnit} onChange={e => setForm({ ...form, wireGaugeUnit: e.target.value })}>
+                        <option>AWG</option>
+                        <option>mm²</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>線芯數量</label>
+                    <input style={{ ...inputStyle, width: 80 }} type="number" min="1" max="50"
+                      value={form.coreCount} onChange={e => setCoreCount(e.target.value)} />
+                  </div>
+                </div>
+
+                <div style={sectionHead}>線組資訊 · Wire Information</div>
+                <div style={{ overflowX: "auto", padding: "0 0 4px 0" }}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
+                    <thead>
+                      <tr>
+                        {["芯序","線色","線碼","左端類型 / 規格","右端類型 / 規格","備註"].map((h, i) => (
+                          <th key={i} style={{ ...thStyle, width: i === 0 ? 44 : i <= 2 ? 110 : i === 5 ? 140 : undefined }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.cores.map((core, i) => (
+                        <tr key={i}>
+                          <td style={{ ...tdStyle(i % 2), fontWeight: 700, fontSize: 13, color: "#1e40af" }}>{i + 1}</td>
+
+                          <td style={tdStyle(i % 2)}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              <div style={{
+                                width: 12, height: 12, borderRadius: "50%", flexShrink: 0,
+                                background: COLOR_DOTS[core.color] || "#e2e8f0",
+                                border: "1px solid #cbd5e1",
+                              }} />
+                              <input style={inputStyle} list={`cl-${i}`} placeholder="線色"
+                                value={core.color} onChange={e => updateCore(i, "color", e.target.value)} />
+                              <datalist id={`cl-${i}`}>{WIRE_COLORS.map(c => <option key={c} value={c} />)}</datalist>
+                            </div>
+                          </td>
+
+                          <td style={tdStyle(i % 2)}>
+                            <input style={inputStyle} placeholder="線碼"
+                              value={core.code} onChange={e => updateCore(i, "code", e.target.value)} />
+                          </td>
+
+                          <td style={{ ...tdStyle(i % 2), textAlign: "left", minWidth: 220 }}>
+                            <EndSelect
+                              typeVal={core.leftEndType} modelVal={core.leftEndModel}
+                              onTypeChange={v => updateCore(i, "leftEndType", v)}
+                              onModelChange={v => updateCore(i, "leftEndModel", v)}
+                              coreCount={form.coreCount} isCore0={i === 0} />
+                          </td>
+
+                          <td style={{ ...tdStyle(i % 2), textAlign: "left", minWidth: 220 }}>
+                            <EndSelect
+                              typeVal={core.rightEndType} modelVal={core.rightEndModel}
+                              onTypeChange={v => updateCore(i, "rightEndType", v)}
+                              onModelChange={v => updateCore(i, "rightEndModel", v)}
+                              coreCount={form.coreCount} isCore0={i === 0} />
+                          </td>
+
+                          <td style={{ ...tdStyle(i % 2), textAlign: "left", minWidth: 140 }}>
+                            <input style={{ ...inputStyle, fontSize: 11 }} placeholder="備註..."
+                              value={core.remark} onChange={e => updateCore(i, "remark", e.target.value)} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ padding: "12px 18px", borderTop: "1px solid #e2e8f0", background: "#f8fafc" }}>
+                  <label style={{ ...labelStyle, marginBottom: 5 }}>線組備註</label>
+                  <textarea
+                    style={{ ...inputStyle, height: 54, resize: "vertical", fontSize: 12 }}
+                    placeholder="針對此線組的整體備註事項..."
+                    value={form.wireRemark}
+                    onChange={e => setForm({ ...form, wireRemark: e.target.value })}
+                  />
+                </div>
+                <div style={{ padding: "12px 18px", borderTop: "1px solid #e2e8f0", display: "flex", gap: 10, alignItems: "center" }}>
+                  <button style={btnPrimary} onClick={handleSave}>
+                    {editId !== null ? "💾 更新線材" : "＋ 建立線材"}
+                  </button>
+                  {editId !== null && (
+                    <button style={{ ...btnDanger, padding: "7px 14px" }}
+                      onClick={() => { setEditId(null); setForm(emptyForm(form.machineName)); }}>
+                      取消編輯
+                    </button>
+                  )}
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>建立後可在「線材總表」查看或匯出</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── LIST TAB ── */}
+          {activeTab === "list" && (
+            <div style={{ padding: 20, maxWidth: 1400, margin: "0 auto" }}>
+              {wireList.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "60px 0", color: "#94a3b8", fontSize: 14 }}>
+                  <div style={{ fontSize: 40, marginBottom: 10 }}>📂</div>
+                  尚無線材資料，請至「新增 / 編輯」頁面建立
+                </div>
+              ) : (
+                Object.entries(grouped).map(([machine, wires]) => (
+                  <div key={machine} style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 6px rgba(0,0,0,.08)", marginBottom: 20, overflow: "hidden" }}>
+                    <div style={{ ...sectionHead, padding: "8px 14px" }}>
+                      🖥️ Handler Model：{machine} · {wires.length} 條線材
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 980 }}>
+                        <thead>
+                          <tr>
+                            {["線名","線組備註","線長","線徑","芯序","線色","線碼","左端類型","左端規格","右端類型","右端規格","芯序備註","操作"].map((h, i) => (
+                              <th key={i} style={{ ...thStyle, fontSize: 10 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {wires.flatMap((wire, wi) =>
+                            wire.cores.map((core, ci) => (
+                              <tr key={`${wire.id}-${ci}`}>
+                                {ci === 0 && (
+                                  <>
+                                    <td style={{ ...tdStyle(wi % 2), fontWeight: 700, color: "#1e40af" }} rowSpan={wire.cores.length}>
+                                      {wire.wireName}
+                                    </td>
+                                    <td style={{ ...tdStyle(wi % 2), maxWidth: 160, textAlign: "left", color: "#64748b", fontSize: 10 }} rowSpan={wire.cores.length}>
+                                      {wire.wireRemark || "-"}
+                                    </td>
+                                    <td style={tdStyle(wi % 2)} rowSpan={wire.cores.length}>
+                                      {wire.wireLength ? `${wire.wireLength} mm` : "-"}
+                                    </td>
+                                    <td style={tdStyle(wi % 2)} rowSpan={wire.cores.length}>
+                                      {wire.wireGauge ? `${wire.wireGauge} ${wire.wireGaugeUnit}` : "-"}
+                                    </td>
+                                  </>
+                                )}
+                                <td style={{ ...tdStyle(wi % 2), fontWeight: 600, color: "#64748b" }}>{ci + 1}</td>
+                                <td style={tdStyle(wi % 2)}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5, justifyContent: "center" }}>
+                                    <div style={{
+                                      width: 10, height: 10, borderRadius: "50%",
+                                      background: COLOR_DOTS[core.color] || "#e2e8f0",
+                                      border: "1px solid #cbd5e1", flexShrink: 0,
+                                    }} />
+                                    {core.color || "-"}
+                                  </div>
+                                </td>
+                                <td style={tdStyle(wi % 2)}>{core.code || "-"}</td>
+                                <td style={tdStyle(wi % 2)}>
+                                  {core.leftEndType
+                                    ? <span style={{ background: "#dbeafe", color: "#1e40af", borderRadius: 3, padding: "1px 6px", fontSize: 10 }}>{core.leftEndType}</span>
+                                    : "-"}
+                                </td>
+                                <td style={tdStyle(wi % 2)}>{core.leftEndModel || "-"}</td>
+                                <td style={tdStyle(wi % 2)}>
+                                  {core.rightEndType
+                                    ? <span style={{ background: "#dcfce7", color: "#166534", borderRadius: 3, padding: "1px 6px", fontSize: 10 }}>{core.rightEndType}</span>
+                                    : "-"}
+                                </td>
+                                <td style={tdStyle(wi % 2)}>{core.rightEndModel || "-"}</td>
+                                <td style={{ ...tdStyle(wi % 2), maxWidth: 140, textAlign: "left", color: "#64748b", fontSize: 10 }}>{core.remark || "-"}</td>
+                                {ci === 0 && (
+                                  <td style={tdStyle(wi % 2)} rowSpan={wire.cores.length}>
+                                    <div style={{ display: "flex", gap: 4, justifyContent: "center", flexDirection: "column", alignItems: "center" }}>
+                                      <button style={{ background: "#e0f2fe", color: "#0369a1", border: "1px solid #bae6fd", borderRadius: 4, padding: "2px 10px", fontSize: 11, cursor: "pointer" }}
+                                        onClick={() => handleEdit(wire)}>編輯</button>
+                                      <button style={btnDanger} onClick={() => handleDelete(wire.id)}>刪除</button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))
+              )}
+              {wireList.length > 0 && (
+                <div style={{ textAlign: "right", padding: "0 4px 16px" }}>
+                  <button style={btnSuccess} onClick={handleExport}>📥 匯出 Excel 總表</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<WireManager />);
+  </script>
+</body>
+</html>
