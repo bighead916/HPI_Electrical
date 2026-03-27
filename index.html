@@ -334,6 +334,21 @@
           });
         };
 
+        // ── Helper: resolve full label for all terminal types ───
+        const resolveSpecLabel = (endType, endModel) => {
+          if (!endModel || endModel === "-") return endModel || "-";
+          if (!endType || !TERMINAL_DATA[endType]) return endModel;
+          const entry = TERMINAL_DATA[endType].find(t => t.model === endModel);
+          if (!entry) return endModel;
+          if (endType === "歐式端子" && entry.color) {
+            return `${entry.color}（${entry.model}）（${entry.awg} / ${entry.mm2}）`;
+          }
+          if (entry.awg && entry.awg !== "-") {
+            return `${entry.model}（${entry.awg} / ${entry.mm2}）`;
+          }
+          return endModel;
+        };
+
         // ── Group by machine ──────────────────────────────────
         const grouped = wireList.reduce((acc, w) => {
           const k = w.machineName || "(未命名機器)";
@@ -397,9 +412,9 @@
                 core.color   || "-",
                 core.code    || "-",
                 core.leftEndType  || "-",
-                core.leftEndModel || "-",
+                resolveSpecLabel(core.leftEndType, core.leftEndModel),
                 core.rightEndType  || "-",
-                core.rightEndModel || "-",
+                resolveSpecLabel(core.rightEndType, core.rightEndModel),
                 core.remark        || "",
                 isFirst ? (wire.wireRemark || "") : "",
                 "",
@@ -447,10 +462,36 @@
 
             // merge wire info cells if multi-core
             if (wire.cores.length > 1) {
+              // Always merge: wire name(1), length(2), gauge(3), wireRemark(12)
               [1, 2, 3, 12].forEach(col => {
                 ws.mergeCells(startR, col, endR, col);
                 const cell = ws.getCell(startR, col);
                 cell.alignment = align("center", "middle", col === 12);
+              });
+
+              // Conditionally merge left/right end cols when ALL cores share same value
+              // Col 7=左端類型, 8=左端規格, 9=右端類型, 10=右端規格
+              [
+                { col: 7,  values: wire.cores.map(c => c.leftEndType) },
+                { col: 8,  values: wire.cores.map(c => c.leftEndModel) },
+                { col: 9,  values: wire.cores.map(c => c.rightEndType) },
+                { col: 10, values: wire.cores.map(c => c.rightEndModel) },
+              ].forEach(({ col, values }) => {
+                const allSame = values.every(v => v === values[0]);
+                if (allSame) {
+                  ws.mergeCells(startR, col, endR, col);
+                  const cell = ws.getCell(startR, col);
+                  cell.alignment = align("center", "middle");
+                  // Re-apply badge fill for type cols after merge
+                  if (col === 7 && wire.cores[0].leftEndType) {
+                    cell.fill = fill(C.leftBg);
+                    cell.font = font(C.leftFg, true, 9);
+                  }
+                  if (col === 9 && wire.cores[0].rightEndType) {
+                    cell.fill = fill(C.rightBg);
+                    cell.font = font(C.rightFg, true, 9);
+                  }
+                }
               });
             }
             // style wireRemark cell (col 12)
@@ -478,7 +519,8 @@
         const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = `線材總表_${new Date().toISOString().slice(0,10)}.xlsx`;
+        const firstMachine = Object.keys(grouped)[0] || "未命名";
+        a.download = `${firstMachine}_線材總表_${new Date().toISOString().slice(0,10)}.xlsx`;
         a.click();
         showFlash("📥 匯出 Excel 成功！");
       };
@@ -760,3 +802,4 @@
   </script>
 </body>
 </html>
+
