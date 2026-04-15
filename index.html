@@ -93,6 +93,7 @@
 
     const CONNECTOR_TYPES = Object.keys(TERMINAL_DATA);
     const WIRE_COLORS = ["棕","黑","紅","橙","黃","綠","藍","紫","白","灰","黃綠"];
+    const COLOR_CYCLE = ["棕","紅","橙","黃","綠","藍","紫","灰","白","黑"];
     const COLOR_DOTS = {
       "棕":"#92400e","黑":"#1e293b","紅":"#ef4444","橙":"#f97316",
       "黃":"#eab308","綠":"#22c55e","藍":"#3b82f6","紫":"#a855f7",
@@ -205,12 +206,57 @@
       const [activeTab, setActiveTab] = useState("form");
       const [editId, setEditId] = useState(null);
       const [flash, setFlash] = useState("");
+      const [importLog, setImportLog] = useState(null); // {ok, msg, detail}
 
       const showFlash = (msg) => { setFlash(msg); setTimeout(() => setFlash(""), 2500); };
 
+      // ── Shared helper: get plain text from ExcelJS cell (handles richText) ──
+      const cellText = (cell) => {
+        if (!cell) return "";
+        const val = cell.value;
+        if (val === null || val === undefined) return "";
+        if (typeof val === "object" && val.richText) {
+          return val.richText.map(r => r.text || "").join("").trim();
+        }
+        if (typeof val === "object" && val.text) return String(val.text).trim();
+        if (typeof val === "object" && val.result !== undefined) return String(val.result).trim();
+        return String(val).trim();
+      };
+
+      // ── Shared helper: reverse-lookup model from full display label ──────
+      const resolveModelFromLabel = (endType, label) => {
+        if (!label || label === "-") return "";
+        if (!endType || !TERMINAL_DATA[endType]) return label;
+        const entries = TERMINAL_DATA[endType];
+        for (const entry of entries) {
+          if (entry.model === label) return entry.model;
+          let full = entry.model;
+          if (endType === "歐式端子" && entry.color) {
+            full = `${entry.color}（${entry.model}）（${entry.awg} / ${entry.mm2}）`;
+          } else if (entry.awg && entry.awg !== "-") {
+            full = `${entry.model}（${entry.awg} / ${entry.mm2}）`;
+          }
+          if (full === label) return entry.model;
+        }
+        // Fallback: extract model code from "顏色（MODEL）（...）" pattern
+        const m = label.match(/（([^（）\s]+(?:-[^\s（）]+)*)）（/);
+        if (m) return m[1];
+        // Or take everything before first "（"
+        return label.split("（")[0].trim() || label;
+      };
+
       const setCoreCount = (val) => {
         const n = Math.max(1, Math.min(50, parseInt(val) || 1));
-        const newCores = Array.from({ length: n }, (_, i) => form.cores[i] || emptyCore());
+        const newCores = Array.from({ length: n }, (_, i) => {
+          const existing = form.cores[i];
+          const autoColor = COLOR_CYCLE[i % COLOR_CYCLE.length];
+          // New slot → auto-fill
+          if (!existing) return { ...emptyCore(), color: autoColor };
+          // Existing slot with no color yet → auto-fill
+          if (!existing.color) return { ...existing, color: autoColor };
+          // Existing slot already has a color → preserve
+          return existing;
+        });
         setForm({ ...form, coreCount: String(n), cores: newCores });
       };
 
@@ -279,6 +325,146 @@
       const handleDelete = (id) => {
         if (window.confirm("確定刪除此線材？"))
           setWireList(wireList.filter(w => w.id !== id));
+      };
+
+      const handleImport = async (file) => {
+        if (!file) return;
+        setImportLog(null);
+        const log = []; // step log
+        const step = (msg) => { log.push(msg); console.log("[Import]", msg); };
+        try {
+          step(`開始讀取檔案：${file.name} (${(file.size/1024).toFixed(1)} KB)`);
+          const buf = await file.arrayBuffer();
+          step("ArrayBuffer 讀取完成");
+          const wb = new ExcelJS.Workbook();
+          await wb.xlsx.load(buf);
+          step(`工作表數量：${wb.worksheets.length}`);
+          const imported = [];
+
+          // Safely extract any ExcelJS cell value as plain string
+          const cellText = (ws, r, c) => {
+            const cell = ws.getCell(r, c);
+            const val = cell.value;
+            if (val === null || val === undefined) return "";
+            if (typeof val === "number") return String(val);
+            if (typeof val === "string") return val.trim();
+            if (typeof val === "object") {
+              // Rich text object: { richText: [{text:"..."},...] }
+              if (Array.isArray(val.richText))
+                return val.richText.map(s => s.text || "").join("").trim();
+              // Formula: { formula:"...", result:"..." }
+              if (val.result !== undefined) return String(val.result).trim();
+              // Shared string reference or other
+              if (val.text !== undefined) return String(val.text).trim();
+            }
+            return String(val).trim();
+          };
+
+          wb.worksheets.forEach(ws => {
+            const totalRows = ws.rowCount;
+
+            // ── Get machine name from row 1 title ─────────────────
+            let machineName = ws.name;
+            const title = cellText(ws, 1, 1);
+            const tm = title.match(/Handler Model[：:]\s*(.+)/);
+            if (tm) machineName = tm[1].trim();
+
+            // ── Pre-read all rows into a 2D array (row 3 onwards) ──
+            // ws.getCell handles merged cells correctly:
+            // non-master cells in a merge return the master cell object
+            const rowData = [];
+            for (let rn = 3; rn <= totalRows; rn++) {
+              rowData.push(Array.from({ length: 13 }, (_, i) => cellText(ws, rn, i + 1)));
+            }
+
+            let carryName = "", carryLen = "", carryGauge = "", carryUnit = "AWG", carryWireRemark = "";
+            let currentWire = null;
+
+            rowData.forEach(cols => {
+              // cols[0..12] = col 1..13
+              const wireName   = cols[0];
+              const wireLength = cols[1];
+              const wireGauge  = cols[2];
+              const coreIdxRaw = cols[3];
+              const coreIdx    = parseInt(coreIdxRaw);
+
+              // Skip rows with no core index (separators / blank rows)
+              if (isNaN(coreIdx)) {
+                // Still carry-forward any non-empty values (handles merged cols 1-3, 12)
+                if (wireName)    carryName = wireName;
+                if (wireLength)  carryLen  = wireLength.replace(/ mm$/, "");
+                if (wireGauge) {
+                  const gm = wireGauge.match(/^([\d.]+)\s*(AWG|mm²)$/);
+                  carryGauge = gm ? gm[1] : wireGauge;
+                  carryUnit  = gm ? gm[2] : "AWG";
+                }
+                if (cols[11]) carryWireRemark = cols[11];
+                return;
+              }
+
+              // Carry-forward non-empty values for this row
+              if (wireName)    carryName = wireName;
+              if (wireLength)  carryLen  = wireLength.replace(/ mm$/, "");
+              if (wireGauge) {
+                const gm = wireGauge.match(/^([\d.]+)\s*(AWG|mm²)$/);
+                carryGauge = gm ? gm[1] : wireGauge;
+                carryUnit  = gm ? gm[2] : "AWG";
+              }
+              if (cols[11]) carryWireRemark = cols[11];
+
+              // New wire starts at coreIdx === 1
+              if (coreIdx === 1) {
+                currentWire = {
+                  id: Date.now() + Math.random(),
+                  machineName,
+                  wireName:      carryName,
+                  wireLength:    carryLen,
+                  wireGauge:     carryGauge,
+                  wireGaugeUnit: carryUnit,
+                  wireRemark:    carryWireRemark,
+                  coreCount:     "1",
+                  cores:         [],
+                };
+                imported.push(currentWire);
+              }
+
+              if (!currentWire) return;
+
+              const leftType  = (cols[6] && cols[6] !== "-") ? cols[6] : "";
+              const rightType = (cols[8] && cols[8] !== "-") ? cols[8] : "";
+
+              currentWire.cores.push({
+                color:         (cols[4] && cols[4] !== "-") ? cols[4] : "",
+                code:          (cols[5] && cols[5] !== "-") ? cols[5] : "",
+                leftEndType:   leftType,
+                leftEndModel:  resolveModelFromLabel(leftType,  cols[7]),
+                rightEndType:  rightType,
+                rightEndModel: resolveModelFromLabel(rightType, cols[9]),
+                remark:        cols[10] || "",
+              });
+              currentWire.coreCount    = String(currentWire.cores.length);
+              currentWire.wireRemark   = carryWireRemark;
+            });
+          });
+
+          step(`解析完成，共 ${imported.length} 條線材`);
+          if (imported.length > 0) {
+            step(`第一條：${imported[0].wireName}，${imported[0].cores.length} 芯`);
+          }
+
+          if (imported.length === 0) {
+            setImportLog({ ok: false, msg: "未找到可載入的線材資料", detail: log.join("\n") });
+            return;
+          }
+          setWireList(imported);
+          setImportLog({ ok: true, msg: `✅ 已成功載入 ${imported.length} 條線材`, detail: log.join("\n") });
+          setActiveTab("list");
+        } catch (err) {
+          console.error("Import error:", err);
+          log.push(`❌ 例外：${err.message}`);
+          log.push(err.stack || "");
+          setImportLog({ ok: false, msg: `載入失敗：${err.message || "未知錯誤"}`, detail: log.join("\n") });
+        }
       };
 
       const handleExport = async () => {
@@ -554,6 +740,18 @@
                   {flash}
                 </div>
               )}
+              {/* Import button */}
+              <label style={{
+                background: "#1e40af", color: "#fff", border: "none", borderRadius: 6,
+                padding: "7px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+                display: "inline-flex", alignItems: "center", gap: 5,
+              }}>
+                📂 載入 Excel
+                <input
+                  type="file" accept=".xlsx" style={{ display: "none" }}
+                  onChange={e => { handleImport(e.target.files[0]); e.target.value = ""; }}
+                />
+              </label>
               {wireList.length > 0 && (
                 <button onClick={handleExport} style={{ ...btnSuccess, fontSize: 12 }}>
                   📥 匯出 Excel ({wireList.length} 筆)
@@ -561,6 +759,37 @@
               )}
             </div>
           </div>
+
+          {/* ── Import Log Panel ── */}
+          {importLog && (
+            <div style={{
+              background: importLog.ok ? "#f0fdf4" : "#fef2f2",
+              border: `1px solid ${importLog.ok ? "#86efac" : "#fca5a5"}`,
+              margin: "12px 20px 0", borderRadius: 8, padding: "10px 14px",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: importLog.ok ? "#166534" : "#991b1b" }}>
+                    {importLog.ok ? "✅" : "❌"} {importLog.msg}
+                  </div>
+                  <details style={{ marginTop: 6 }}>
+                    <summary style={{ fontSize: 11, color: "#64748b", cursor: "pointer" }}>
+                      {importLog.ok ? "顯示載入紀錄" : "▶ 展開錯誤詳情（請截圖回報）"}
+                    </summary>
+                    <pre style={{ marginTop: 6, fontSize: 10, color: "#334155", background: "#f8fafc",
+                      padding: 8, borderRadius: 4, overflowX: "auto", whiteSpace: "pre-wrap",
+                      maxHeight: 200, overflowY: "auto" }}>
+                      {importLog.detail}
+                    </pre>
+                  </details>
+                </div>
+                <button onClick={() => setImportLog(null)}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 16, color: "#94a3b8", padding: "0 4px" }}>
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Tabs ── */}
           <div style={{ background: "#1e293b", display: "flex", gap: 2, padding: "0 16px" }}>
@@ -802,4 +1031,3 @@
   </script>
 </body>
 </html>
-
