@@ -92,6 +92,43 @@
     };
 
     const CONNECTOR_TYPES = Object.keys(TERMINAL_DATA);
+
+    const APP_VERSION = "V2.0";
+
+    const HISTORY = [
+      {
+        version: "V2.0",
+        date: "2025-04-15",
+        tag: "新功能",
+        tagColor: "15803D",
+        tagBg: "DCFCE7",
+        items: [
+          "【新功能】線芯自動排列線色：輸入線芯數量後，各芯序依循環順序（棕→紅→橙→黃→綠→藍→紫→灰→白→黑）自動填入線色預設值，已手動填寫的顏色不受影響",
+          "【新功能】載入備份繼續編輯：新增「📂 載入 Excel」按鈕，可載入由本系統匯出的 .xlsx 檔案，完整還原所有線材資料（Handler Model、線名、線長、線徑、各芯序線色/線碼/端子/備註）繼續編輯",
+          "【改善】載入錯誤時顯示詳細步驟紀錄面板，方便診斷問題",
+        ],
+      },
+      {
+        version: "V1.x",
+        date: "2025-04-01",
+        tag: "初始版本",
+        tagColor: "1E40AF",
+        tagBg: "DBEAFE",
+        items: [
+          "線材組態輸入：Handler Model、線名、線長、線徑（AWG / mm²）、線芯數量",
+          "線組資訊：各芯序線色（含圓點預覽）、線碼、左右端端子兩層下拉、芯序備註",
+          "內建端子型錄：六大類共 54+ 種規格（歐式、母壓排、R型、Y型、全絕緣母端子、AMP PIN針）",
+          "歐式端子下拉以「顏色（型號）（AWG/mm²）」格式顯示",
+          "母壓排智能鎖定：依線芯數量自動決定 P 數，任一芯序選取後同步全部芯序",
+          "線材總表：依 Handler Model 分組，支援編輯與刪除",
+          "匯出 Excel：彩色格式，線色欄套用對應背景色，左右端類型標籤色，多芯合併儲存格，機器分頁",
+          "匯出規格欄位完整帶入選單顯示內容（含 AWG / mm² 資訊）",
+          "相同端子類型/規格時跨芯序合併儲存格",
+          "匯出檔名格式：{機型}_線材總表_{日期}.xlsx",
+          "線組備註（整組）與芯序備註（各芯獨立）",
+        ],
+      },
+    ];
     const WIRE_COLORS = ["棕","黑","紅","橙","黃","綠","藍","紫","白","灰","黃綠"];
     const COLOR_CYCLE = ["棕","紅","橙","黃","綠","藍","紫","灰","白","黑"];
     const COLOR_DOTS = {
@@ -730,7 +767,16 @@
                 onError={e => { e.target.style.display = "none"; }}
               />
               <div>
-                <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1, lineHeight: 1.3 }}>HPI 電控線材資料管理系統</div>
+                <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1, lineHeight: 1.3, display: "flex", alignItems: "center", gap: 8 }}>
+                  HPI 電控線材資料管理系統
+                  <span
+                    onClick={() => setActiveTab("history")}
+                    style={{ background: "#1e40af", color: "#fff", fontSize: 10, fontWeight: 700,
+                      padding: "2px 7px", borderRadius: 4, letterSpacing: "0.5px", cursor: "pointer",
+                      border: "1px solid #3b82f6" }}>
+                    {APP_VERSION}
+                  </span>
+                </div>
                 <div style={{ fontSize: 10, color: "#64748b", marginTop: 1, letterSpacing: "0.5px" }}>Wire / Cable Management System</div>
               </div>
             </div>
@@ -793,7 +839,7 @@
 
           {/* ── Tabs ── */}
           <div style={{ background: "#1e293b", display: "flex", gap: 2, padding: "0 16px" }}>
-            {[["form", "✏️ 新增 / 編輯"], ["list", `📋 線材總表 (${wireList.length})`]].map(([tab, label]) => (
+            {[["form", "✏️ 新增 / 編輯"], ["list", `📋 線材總表 (${wireList.length})`], ["history", "📜 更新歷史"]].map(([tab, label]) => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 style={{
                   padding: "10px 18px", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
@@ -1023,6 +1069,55 @@
               )}
             </div>
           )}
+
+          {/* ── HISTORY TAB ── */}
+          {activeTab === "history" && (
+            <div style={{ padding: 20, maxWidth: 860, margin: "0 auto" }}>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#1e3a5f" }}>📜 更新歷史</div>
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Version History</div>
+              </div>
+              {HISTORY.map((entry) => (
+                <div key={entry.version} style={{ background: "#fff", borderRadius: 10,
+                  boxShadow: "0 1px 6px rgba(0,0,0,.07)", marginBottom: 16, overflow: "hidden" }}>
+                  {/* Version header */}
+                  <div style={{ background: "#0f172a", padding: "10px 18px", display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0" }}>{entry.version}</span>
+                    <span style={{ background: "#" + entry.tagBg, color: "#" + entry.tagColor,
+                      fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4 }}>
+                      {entry.tag}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#64748b", marginLeft: "auto" }}>{entry.date}</span>
+                  </div>
+                  {/* Items */}
+                  <div style={{ padding: "12px 20px" }}>
+                    {entry.items.map((item, i) => (
+                      <div key={i} style={{ display: "flex", gap: 10, padding: "6px 0",
+                        borderBottom: i < entry.items.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+                        <span style={{ color: "#94a3b8", fontSize: 13, flexShrink: 0, marginTop: 1 }}>▸</span>
+                        <span style={{ fontSize: 12, color: "#334155", lineHeight: 1.6 }}>
+                          {item.startsWith("【新功能】") ? (
+                            <>
+                              <span style={{ background: "#dcfce7", color: "#15803d", fontWeight: 700,
+                                fontSize: 10, padding: "1px 5px", borderRadius: 3, marginRight: 5 }}>新功能</span>
+                              {item.replace("【新功能】", "")}
+                            </>
+                          ) : item.startsWith("【改善】") ? (
+                            <>
+                              <span style={{ background: "#fef9c3", color: "#854d0e", fontWeight: 700,
+                                fontSize: 10, padding: "1px 5px", borderRadius: 3, marginRight: 5 }}>改善</span>
+                              {item.replace("【改善】", "")}
+                            </>
+                          ) : item}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
         </div>
       );
     }
